@@ -1,0 +1,32 @@
+# ---------------- Figures ----------------- 
+figure.dpi : 500
+figure.figsize : 15.0,7.0
+
+# ---------------- Axes ----------------- 
+axes.edgecolor : ffffff 
+axes.facecolor : 000000
+axes.grid : True
+axes.linewidth: 1
+axes.spines.top : False
+axes.spines.right : False
+axes.ymargin : 0.1
+axes.xmargin : 0
+axes.prop_cycle : cycler('color', ['1976d2', '0097a7', '388e3c', 'fbc02d', 'd32f2f', '7b1fa2'])
+axes.titlesize : 16
+axes.titleweight : bold
+
+# ---------------- Grid ----------------- 
+grid.alpha : 0.3
+grid.color : ffffff
+
+# ---------------- Legend ----------------- 
+legend.frameon : True
+legend.facecolor : ffffff 
+legend.framealpha : 1.0
+
+# ---------------- Ticks and Lines ----------------- 
+xtick.labelcolor : 000000 
+xtick.major.pad : 5
+ytick.major.pad : 5
+
+lines.linewidth : 1.5
