@@ -4,7 +4,7 @@ figure.figsize : 15.0,7.0
 
 # ---------------- Axes ----------------- 
 axes.edgecolor : 000000
-axes.facecolor : e0e0e0
+axes.facecolor : e4eef6
 axes.grid : True
 axes.linewidth: 1
 axes.spines.top : False
@@ -16,8 +16,8 @@ axes.titlesize : 16
 axes.titleweight : bold
 
 # ---------------- Grid ----------------- 
-grid.alpha : 0.3
-grid.color : 000000
+grid.alpha : 0.9
+grid.color : ffffff
 
 # ---------------- Legend ----------------- 
 legend.frameon : True

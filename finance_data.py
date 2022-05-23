@@ -1,4 +1,7 @@
-# import finance module
+import glob
+import os
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -6,7 +9,10 @@ import yfinance as yf
 
 
 class Finance_Data:
-    def __init__(self, ticker, period="MAX"):
+    # Market Data (SPY)
+    market_data = yf.Ticker("SPY").history(period="MAX").Close
+
+    def __init__(self, ticker: str = None, period: str = "MAX"):
         """setup finance data class
 
         :param ticker: ticker to get data for
@@ -14,24 +20,24 @@ class Finance_Data:
         :param period: data period, defaults to "MAX"
         :type period: str, optional
         """
+
         self.ticker = ticker
         self.complete_data = yf.Ticker(ticker)
         self.data = self.complete_data.history(period=period)
-        self.market_data = yf.Ticker("SPY").history(period="MAX").Close
 
-    def percent_return(self, time_frame=None):
+    def percent_return(self, time_frame: str = None) -> pd.Series:
         """returns the percent return for the ticker
 
         :param time_frame: time frame for percent return (needs to be a pandas time frame e.g. "10Y"), defaults to None
         :type time_frame: str, optional
         :return: returns percent return over a time period 
-        :rtype: series 
+        :rtype: Series 
         """
         if time_frame:
             return (self.data.Close.last(time_frame).pct_change() + 1).cumprod()
         return (self.data.Close.pct_change() + 1).cumprod()
 
-    def plot_data(self, plot_type="REGULAR", color="LIGHT"):
+    def plot_data(self, plot_type: str = "REGULAR", color: str = "LIGHT"):
         """plots data for ticker
 
         :param plot_type: can choose between REGULAR, PERCENT and LOG_PERCENT returns for plotting, defaults to "REGULAR"
@@ -75,5 +81,29 @@ class Finance_Data:
         plt.show()
 
 
-if __name__ == "__main__":
-    pass
+def load_data(path: str) -> dict:
+    """loads finanacial data from a path
+
+    :param path: path to data csv or dir with data csv
+    :type path: str
+    :return: dataframe of financial data
+    :rtype: dict
+    """
+    file_list = glob.glob(f"{path}/*.csv") if os.path.isdir(path) else path
+    return {
+        Path(data).stem: pd.read_csv(data, index_col=0, parse_dates=True)
+        for data in file_list
+    }
+
+
+def download_data(*args, **kwargs) -> pd.DataFrame:
+    """retrieves financial data from yfinance api to be downloaded
+
+    *args: tickers that need data to be retrieved
+    **kwargs: any settings that the yfinance api needs
+
+    :return: dataframe of ticker data
+    :rtype: DataFrame 
+    """
+    tickers = " ".join(args)
+    return yf.download(tickers, auto_adjust=True, group_by="ticker", **kwargs)
