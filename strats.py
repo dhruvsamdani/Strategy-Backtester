@@ -33,8 +33,16 @@ class _Order:
         self.start_amount = start_a
         self.filled = False
 
-    def __lt__(self, other):
+    def __lt__(self, other: any) -> bool:
         return False if not isinstance(other, _Order) else self.profit < other.profit
+
+    def __add__(self, other: any) -> float:
+        if isinstance(other, _Order):
+            return self.value() + other.value()
+        return self.value() + other
+
+    def __radd__(self, other: any) -> float:
+        return self.value() + other
 
     def fill(self, num_shares, end_t, end_a):
         """fill the order for the shares
@@ -54,8 +62,12 @@ class _Order:
         """
         try:
             self.profit = self.end_amount - self.start_amount
+            return self.profit
         except TypeError:
             logging.error("End or Start amount is None")
+
+    def value(self):
+        return self.end_amount if self.filled else self.start_amount
 
 
 class Order_Info:
@@ -82,10 +94,9 @@ class Order_Info:
         :param end_t: end time
         :param end_a: end amount
         """
-        while num_shares > 0:
+        while num_shares > 0 and self.open_orders:
             order = self.open_orders.popleft()
             if num_shares < order.num_shares:
-                # Num shares less than order shares
                 replace_order = _Order(
                     order.num_shares - num_shares, order.start_time, order.start_amount
                 )
@@ -95,6 +106,17 @@ class Order_Info:
             self.completed_orders.append(order)
 
             num_shares -= order.num_shares
+
+    def order_worth(self) -> float:
+        """Returns buying power from orders. Buying power will only work with a starting amount of cash.
+        Ex: starting amount (starting amount, not given) - profit from order (completed_order) - invested orders (open_order)
+
+        :return: buying power
+        :rtype: float
+        """
+        return sum(
+            (closed_order.profit_loss() for closed_order in self.completed_orders)
+        ) - sum(open_order for open_order in self.open_orders)
 
     def to_df(self) -> pd.DataFrame:
         """
@@ -111,7 +133,9 @@ class NoDataException(Exception):
 
 
 class Strategey(ABC):
-    def __init__(self, ticker: str, data: pd.DataFrame = None):
+    def __init__(
+        self, ticker: str, data: pd.DataFrame = None, initial_amount: int = 100
+    ):
         """
         Default Strategy class
 
@@ -119,6 +143,8 @@ class Strategey(ABC):
         :type ticker: str
         :param data: data for the strategy to find buy and sell points, defaults to None
         :type data: pd.DataFrame, optional
+        :param initial_amount: starting amount
+        :type inital_amount: int, optional
         """
 
         try:
@@ -133,7 +159,9 @@ class Strategey(ABC):
         self.ticker = ticker.upper()
         self.buy_orders = {}
         self.sell_orders = {}
+        self.active_orders = 0
         self.orders = Order_Info()
+        self.current_amount = initial_amount
 
     @abstractmethod
     def setup_indicator(self):
@@ -142,6 +170,15 @@ class Strategey(ABC):
     @abstractmethod
     def buy_and_sell(self):
         pass
+
+    def _curr_amnt(self) -> float:
+        """returns buying power at the time when function is called
+
+        :return: buying power
+        :rtype: float
+        """
+        self.current_amount += self.orders.order_worth()
+        return self.current_amount
 
     def rolling_average(self, data, time_frame):
         """Generates simple moving average for data
@@ -165,7 +202,9 @@ class Strategey(ABC):
         :param price: price of the stock
         :type price: float
         """
-
+        if self._curr_amnt() < price * num_shares:
+            return
+        self.active_orders += num_shares
         self.buy_orders[date] = num_shares
         self.sell_orders[date] = 0
         self.orders.new_order(num_shares, start_t=date, start_a=price)
@@ -181,9 +220,11 @@ class Strategey(ABC):
         :type price: float
         """
 
-        self.sell_orders[date] = num_shares
-        self.buy_orders[date] = 0
-        self.orders.close_order(num_shares, end_t=date, end_a=price)
+        if self.active_orders > 0:
+            self.active_orders -= num_shares
+            self.sell_orders[date] = num_shares
+            self.buy_orders[date] = 0
+            self.orders.close_order(num_shares, end_t=date, end_a=price)
 
     def plot_data(
         self,
@@ -409,7 +450,7 @@ class Backtest:
 
 
 class MA_Cross_Strat(Strategey):
-    def __init__(self, ticker: str, data: pd.DataFrame):
+    def __init__(self, ticker: str, data: pd.DataFrame, initial_amount=100):
         """Strategy that buys stock when a short moving average crosses a long one and sells when the long crosses the short.
         20 day crossing 100 and vise versa. Child class of Strategy
 
@@ -418,7 +459,7 @@ class MA_Cross_Strat(Strategey):
         :param data: data that the strategy will be tested on
         :type data: pd.DataFrame
         """
-        Strategey.__init__(self, ticker, data)
+        Strategey.__init__(self, ticker, data, initial_amount=initial_amount)
         self.setup_indicator()
         self.buy_and_sell()
 
@@ -442,12 +483,12 @@ class MA_Cross_Strat(Strategey):
 
         for i in buy:
             data = self.data.iloc[i]
-            self.buy(1, data.name, data.Close)
+            self.buy(10, data.name, data.Close)
 
         for i in sell:
             data = self.data.iloc[i]
             if i > first_buy:
-                self.sell(1, data.name, data.Close)
+                self.sell(10, data.name, data.Close)
 
 
 class Ten_Percent_Strat(Strategey):
@@ -493,23 +534,17 @@ if __name__ == "__main__":
     # download_data('AAPL', 'MSFT', 'TSLA').AAPL.to_csv("./data/aapl.csv")
 
     # Load data from a directory
-    data = load_data("./data")
+    data = load_data("./data")["aapl"].last("10Y")
 
     # Enter data into strategy
-    tps = MA_Cross_Strat("aapl", data["aapl"])
+    mcs = MA_Cross_Strat("aapl", data, initial_amount=1000)
 
     # Initalize backtest
-    t = Backtest(100, "aapl", input_data=data["aapl"])
-    t.setup_strat(tps)
-
-    output = t.run()
-    t.metrics()
-    # orders = t.strat.orders
-    # orders.to_df().to_csv("orders.csv")
-
-    tps.plot_data(
-        ((output[["net_worth", "SP500"]].last("10Y").pct_change() + 1).cumprod() * 100)
-        - 100,
+    backtest = Backtest(1000, "aapl", input_data=data)
+    backtest.setup_strat(mcs)
+    output = backtest.run()
+    mcs.plot_data(
+        ((output[["net_worth"]].last("10Y").pct_change() + 1).cumprod() * 100) - 100,
         title="Percent return of MA strategy against time",
         ylabel="Percent Returns",
         color="LIGHT",
