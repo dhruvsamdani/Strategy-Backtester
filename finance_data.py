@@ -11,6 +11,8 @@ import yfinance as yf
 class Finance_Data:
     # Market Data (SPY)
     market_data = yf.Ticker("SPY").history(period="MAX").Close
+    risk_free_rate_10y = yf.Ticker("^TNX").history(period="1d").Close[0] / 100
+    risk_free_rate_90d = yf.Ticker("^IRX").history(period="1d").Close[0] / 100
 
     def __init__(self, ticker: str = None, period: str = "MAX"):
         """setup finance data class

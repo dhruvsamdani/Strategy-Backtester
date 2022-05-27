@@ -4,13 +4,13 @@ import os
 from abc import ABC, abstractmethod
 from collections import deque
 from functools import total_ordering
-from typing import Callable
+from typing import Callable, Type
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from finance_data import Finance_Data, download_data, load_data
+from finance_data import Finance_Data
 
 
 @total_ordering
@@ -52,7 +52,8 @@ class _Order:
         :type end_t: datetime
         :param end_a: end amount
         """
-        self.num_shares = num_shares
+
+        self.num_shares = self.num_shares if num_shares == -1 else num_shares
         self.end_time = end_t
         self.end_amount = end_a
         self.filled = True
@@ -61,7 +62,7 @@ class _Order:
         """calculates the profit
         """
         try:
-            self.profit = self.end_amount - self.start_amount
+            self.profit = (self.end_amount - self.start_amount) * self.num_shares
             return self.profit
         except TypeError:
             logging.error("End or Start amount is None")
@@ -93,7 +94,17 @@ class Order_Info:
         :param num_shares: number of shares to fill
         :param end_t: end time
         :param end_a: end amount
+        :return number of shares
+        :rtype: float
         """
+
+        if num_shares == -1 and self.open_orders:
+            order = self.open_orders.popleft()
+            order.fill(num_shares, end_t, end_a)
+            order.profit_loss()
+            self.completed_orders.append(order)
+            return order.num_shares
+
         while num_shares > 0 and self.open_orders:
             order = self.open_orders.popleft()
             if num_shares < order.num_shares:
@@ -106,6 +117,7 @@ class Order_Info:
             self.completed_orders.append(order)
 
             num_shares -= order.num_shares
+        return num_shares
 
     def order_worth(self) -> float:
         """Returns buying power from orders. Buying power will only work with a starting amount of cash.
@@ -124,7 +136,19 @@ class Order_Info:
         :return: orders dataframe
         """
         return pd.DataFrame(
-            [order.__dict__ for order in self.completed_orders + list(self.open_orders)]
+            [
+                order.__dict__
+                for order in self.completed_orders + list(self.open_orders)
+            ],
+            columns=[
+                "num_shares",
+                "start_time",
+                "start_amount",
+                "filled",
+                "end_time",
+                "end_amount",
+                "profit",
+            ],
         )
 
 
@@ -192,39 +216,53 @@ class Strategey(ABC):
         """
         return data.rolling(time_frame).mean()
 
-    def buy(self, num_shares: int, date: datetime, price: float):
+    def buy(self, date: datetime, price: float, num_shares: int = -1):
         """Used to buy share at a certain date
 
-        :param num_shares: number of shares to buy
-        :type num_shares: int
         :param date: the day to buy the stock 
         :type date: datetime
         :param price: price of the stock
         :type price: float
+        :param num_shares: number of shares to buy
+        :type num_shares: int
         """
-        if self._curr_amnt() < price * num_shares:
+
+        current_amount = self._curr_amnt()
+
+        if num_shares == -1 and current_amount > 0:
+            num_shares = current_amount // price
+        # else:
+        #     num_shares = 0
+
+        if current_amount < price * num_shares:
             return
         self.active_orders += num_shares
         self.buy_orders[date] = num_shares
         self.sell_orders[date] = 0
         self.orders.new_order(num_shares, start_t=date, start_a=price)
 
-    def sell(self, num_shares: int, date: datetime, price: float):
+    def sell(self, date: datetime, price: float, num_shares: int = -1):
         """Used to sell share at a certain date
 
-        :param num_shares: number of shares to buy
-        :type num_shares: int
         :param date: the day to buy the stock 
         :type date: datetime
         :param price: price of the stock
         :type price: float
+        :param num_shares: number of shares to buy
+        :type num_shares: int
         """
 
         if self.active_orders > 0:
+            if num_shares == -1:
+                num_shares = self.orders.close_order(
+                    num_shares, end_t=date, end_a=price
+                )
+            else:
+                self.orders.close_order(num_shares, end_t=date, end_a=price)
+
             self.active_orders -= num_shares
             self.sell_orders[date] = num_shares
             self.buy_orders[date] = 0
-            self.orders.close_order(num_shares, end_t=date, end_a=price)
 
     def plot_data(
         self,
@@ -280,6 +318,7 @@ class Strategey(ABC):
             variant="small-caps",
             zorder=3,
         )
+        plt.legend(["Strategy", "S&P500"])
         if not os.path.isdir("./Graphs"):
             os.makedirs("Graphs")
         plt.savefig("Graphs/" + filename)
@@ -290,25 +329,22 @@ class Backtest:
         self,
         initial_amount: int,
         ticker: str,
+        strat: Type[Strategey],
         data_func: Callable = None,
         input_data: pd.DataFrame = None,
         *args,
-        **kwargs
     ):
         """
         Creates the backtest dataframe with the initial financial data entered
         :param initial_amount: starting amount of money
         :param ticker: ticker
+        :param strat: Strategy to backtest
         :param data_func: function to get data if needed
         :param input_data: input data if needed
         :param args: args for the data func
-        :param kwargs: for individual column data
         """
 
-        self.initial_amount = initial_amount
-        self.strat = None
-
-        if not bool(kwargs) and not data_func and input_data is None:
+        if not data_func and input_data is None:
             raise NoDataException(
                 "There is no default data (one of the OHLCV) provided for the backtest"
             )
@@ -316,9 +352,7 @@ class Backtest:
         if isinstance(input_data, pd.DataFrame) and not input_data.empty:
             data = input_data
         elif data_func:
-            data = data_func(*args)[ticker]
-        else:
-            data = kwargs
+            data = data_func(*args)
 
         if isinstance(data, pd.DataFrame):
             data.columns = data.columns.str.lower()
@@ -338,15 +372,18 @@ class Backtest:
             ],
         )
 
-    def setup_strat(self, strat: Strategey):
+        self.data = data
+        self.initial_amount = initial_amount
+        self.strat = strat
+        self.ticker = ticker
+
+    def setup_strat(self):
         """
         Adds strategy to backtest
-        :param strat: Strategy
-        :type strat: Strategey
         """
-        self.strat = strat
+        self.strat = self.strat(self.ticker, self.data, self.initial_amount)
 
-    def _calc_trading_shares(self):
+    def _enter_positions(self):
         """enters when to buy and sell a stack and calculates total number of stocks owned
         """
         self.backtest["buy"] = pd.Series(self.strat.buy_orders)
@@ -356,7 +393,7 @@ class Backtest:
             self.backtest.buy - self.backtest.sell
         ).cumsum()
 
-    def _calculate_net_worth(self):
+    def _net_worth(self):
         """Calculates net worth from the strategy backtested
         """
         buy = self.backtest.buy
@@ -387,22 +424,19 @@ class Backtest:
         :rtype: DataFrame 
         """
 
-        self._calc_trading_shares()
-        self._calculate_net_worth()
+        self.setup_strat()
+        self._enter_positions()
+        self._net_worth()
 
-        self.backtest = pd.concat(
-            [
-                self.backtest,
-                pd.DataFrame(
-                    {
-                        "SP500": Finance_Data.market_data.loc[
-                            : self.backtest.index[-1]
-                        ].tail(len(self.backtest))
-                    }
-                ),
-            ],
-            axis=1,
-        ).fillna(0)
+        market_data = pd.DataFrame(
+            {
+                "SP500": Finance_Data.market_data.loc[: self.backtest.index[-1]].tail(
+                    len(self.backtest)
+                )
+            }
+        )
+
+        self.backtest = pd.concat([self.backtest, market_data], axis=1).fillna(0)
         return self.backtest
 
     def metrics(self, output: bool = True) -> dict:
@@ -414,24 +448,115 @@ class Backtest:
         :rtype: dict
         """
 
+        backtest = self.backtest
         orders = self.strat.orders.to_df()
+        start_amount = self.initial_amount
+        end_amount = backtest.net_worth[-1]
+        time_period = backtest.index
 
+        stats = {}
+
+        stats["Ticker"] = self.ticker.upper()
+        stats["Start Time"] = time_period[0]
+        stats["End Time"] = time_period[-1]
+        stats["Start Amount"] = start_amount
+        stats["End Amount"] = end_amount
+
+        # ------ Average Hold Time -----
+        stats["Average Hold Time"] = str((orders.end_time - orders.start_time).mean())
+
+        # ------ Average Losses -----
+        stats["Average Losses"] = orders.loc[orders.profit < 0].profit.mean()
+
+        # ------ Average Profits -----
+        stats["Average Profits"] = orders.loc[orders.profit > 0].profit.mean()
+
+        # ------ Biggest Loss -----
+        stats["Biggest Loss"] = orders.loc[orders.profit < 0].profit.min()
+
+        # ------ Biggest Win -----
+        stats["Biggest Win"] = orders.profit.max()
+
+        # ------ CAGR -----
+        years = (time_period[-1] - time_period[0]).days // 365
+        cagr = ((end_amount / start_amount) ** (1 / years) - 1) * 100
+
+        stats["Compound Annual Growth Rate (%) "] = cagr
+
+        # ------------  Max Drawdown -----------
+        rolling_max = backtest.net_worth.cummax()
+        drawdown = backtest.net_worth / rolling_max - 1
+
+        stats["Max Drawdown (%)"] = drawdown.min() * 100
+        stats["Average Drawdown (%)"] = drawdown.mean() * 100
+
+        # ------------  Net Profit -----------
+        stats["Net Profit"] = backtest.net_worth[-1] - start_amount
+
+        # ------------  Profit Factor -----------
         loss = orders.loc[orders.profit < 0].profit.sum()
+        profit = orders.loc[orders.profit > 0].profit.sum()
         if loss == 0 or np.isnan(loss):
             loss = -1
+        stats["Profit Factor"] = profit / -loss
 
-        # ! WILL ADD MORE STATS LATER
-        stats = {
-            "Net Profit": self.backtest.net_worth[-1],
-            "Profit Factor": orders.loc[orders.profit > 0].profit.sum() / -loss,
-            "Biggest Win": orders.profit.max(),
-            "Biggest Loss": orders.loc[orders.profit < 0].profit.min(),
-            "Risk Reward": orders.groupby("filled").profit.sum()[1]
-            / orders.groupby("filled").start_amount.sum()[1],
-            "Average Profits": orders.profit.mean(),
-            "Average Losses": orders.loc[orders.profit < 0].profit.mean(),
-            "Average Hold Time": str((orders.end_time - orders.start_time).mean()),
-        }
+        # ------------  Risk Reward -----------
+        if not orders.empty:
+            total_gain = orders.groupby("filled").profit.sum()[1]
+            total_risked = (orders.start_amount * orders.num_shares).sum()
+            risk_reward = total_gain / total_risked
+        else:
+            risk_reward = np.NaN
+
+        stats["Risk Reward"] = risk_reward
+
+        # ------------  Sharpe Ratio -----------
+        risk_free_rate = Finance_Data.risk_free_rate_10y
+        annual_er = (backtest.net_worth.pct_change().mean() + 1) ** 255 - 1
+        sharpe = (annual_er - risk_free_rate) / (
+            backtest.net_worth.pct_change().std() * np.sqrt(252)
+        )
+        stats["Sharpe Ratio"] = sharpe
+
+        # ------------  Volatility -----------
+        stats[
+            "Volatility Annualized (% change)"
+        ] = backtest.net_worth.pct_change().std() * np.sqrt(252)
+
+        # ------------  Beta -----------
+
+        strat_r = (backtest.net_worth.pct_change()).mean()
+        market_r = (backtest.SP500.pct_change()).mean()
+        covariance = (
+            (backtest.net_worth.pct_change() - strat_r)
+            * (backtest.SP500.pct_change() - market_r)
+        ).sum() / len(backtest)
+
+        variance = backtest.net_worth.pct_change().var()
+
+        stats["Beta"] = covariance / variance
+
+        # ------------  Alpha -----------
+        stock_return = (
+            backtest.net_worth[-1] - backtest.net_worth[0]
+        ) / backtest.net_worth[0]
+
+        alpha = (
+            stock_return
+            - Finance_Data.risk_free_rate_10y
+            - stats["Beta"]
+            * (
+                (backtest.SP500[-1] / backtest.SP500[0] - 1)
+                - Finance_Data.risk_free_rate_10y
+            )
+        )
+
+        stats["Alpha"] = alpha
+
+        # ------------  R-Squared -----------
+        stats["R-Squared"] = covariance / (
+            np.sqrt(variance) * backtest.SP500.pct_change().std()
+        )
 
         if output:
             with pd.option_context(
@@ -449,103 +574,5 @@ class Backtest:
         return stats
 
 
-class MA_Cross_Strat(Strategey):
-    def __init__(self, ticker: str, data: pd.DataFrame, initial_amount=100):
-        """Strategy that buys stock when a short moving average crosses a long one and sells when the long crosses the short.
-        20 day crossing 100 and vise versa. Child class of Strategy
-
-        :param ticker: ticker symbol 
-        :type ticker: str 
-        :param data: data that the strategy will be tested on
-        :type data: pd.DataFrame
-        """
-        Strategey.__init__(self, ticker, data, initial_amount=initial_amount)
-        self.setup_indicator()
-        self.buy_and_sell()
-
-    def setup_indicator(self):
-        """Configures and sets up the indicators. Adds indicators that strategey needs to the DataFrame for the ticker
-        """
-        self.indicators.append(self.rolling_average(self.data, 20).Close)
-        self.indicators.append(self.rolling_average(self.data, 100).Close)
-
-    def buy_and_sell(self):
-        """Main strategey is in this function. Decides when to mark a day as buy and sell based on the indicators
-        """
-        twenty_ma, hundred_ma = self.indicators
-
-        cross = twenty_ma > hundred_ma
-
-        buy = np.where(((cross != cross.shift(1)) & cross))[0]
-        sell = np.where((cross != cross.shift(1)) & (cross == False))[0]
-
-        first_buy = buy[0]
-
-        for i in buy:
-            data = self.data.iloc[i]
-            self.buy(10, data.name, data.Close)
-
-        for i in sell:
-            data = self.data.iloc[i]
-            if i > first_buy:
-                self.sell(10, data.name, data.Close)
-
-
-class Ten_Percent_Strat(Strategey):
-    """Example expiramental strategey
-    Buys when price goes 1% below last sell price and sells when price
-    goes above 5% of last buy price
-
-    """
-
-    def __init__(self, ticker, data):
-        Strategey.__init__(self, ticker, data)
-        self.setup_indicator()
-        self.buy_and_sell()
-
-    def setup_indicator(self):
-        self.indicators.append(self.data.Close * 1.05)
-        self.indicators.append(self.data.Close * 0.99)
-
-    def buy_and_sell(self):
-        sell_price, buy_price = self.indicators
-        current_amount_idx = 0
-        last_move_sell = False
-
-        self.buy(1, self.data.index[0], self.data.Close[0])
-
-        for i in range(1, len(self.data)):
-            date = self.data.index[i]
-            value = self.data.Close[i]
-
-            if (value >= sell_price[current_amount_idx]) and not last_move_sell:
-                self.sell(1, date, value)
-                current_amount_idx = i
-                last_move_sell = True
-            elif (value <= buy_price[current_amount_idx]) and last_move_sell:
-                self.buy(2, date, value)
-                current_amount_idx = i
-                last_move_sell = False
-
-
 if __name__ == "__main__":
-
-    # Download data for tickers
-    # download_data('AAPL', 'MSFT', 'TSLA').AAPL.to_csv("./data/aapl.csv")
-
-    # Load data from a directory
-    data = load_data("./data")["aapl"].last("10Y")
-
-    # Enter data into strategy
-    mcs = MA_Cross_Strat("aapl", data, initial_amount=1000)
-
-    # Initalize backtest
-    backtest = Backtest(1000, "aapl", input_data=data)
-    backtest.setup_strat(mcs)
-    output = backtest.run()
-    mcs.plot_data(
-        ((output[["net_worth"]].last("10Y").pct_change() + 1).cumprod() * 100) - 100,
-        title="Percent return of MA strategy against time",
-        ylabel="Percent Returns",
-        color="LIGHT",
-    )
+    pass
