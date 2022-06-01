@@ -1,21 +1,25 @@
 import datetime
 import logging
+import math
 import os
 from abc import ABC, abstractmethod
 from collections import deque
 from functools import total_ordering
-from typing import Callable, Type
+from typing import Any, Callable, Type
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from finance_data import Finance_Data
+from backtest import Optimize
+from backtest.finance_data import Finance_Data
 
 
 @total_ordering
 class _Order:
-    def __init__(self, num_shares, start_t=None, start_a=None):
+    def __init__(
+        self, num_shares: int, start_t: datetime = None, start_a: float = None
+    ):
         """order class for purchase of shares
 
         :param num_shares: number of shares to buy 
@@ -33,24 +37,26 @@ class _Order:
         self.start_amount = start_a
         self.filled = False
 
-    def __lt__(self, other: any) -> bool:
+    def __lt__(self, other: Any) -> bool:
         return False if not isinstance(other, _Order) else self.profit < other.profit
 
-    def __add__(self, other: any) -> float:
+    def __add__(self, other: Any) -> float:
         if isinstance(other, _Order):
             return self.value() + other.value()
         return self.value() + other
 
-    def __radd__(self, other: any) -> float:
+    def __radd__(self, other: Any) -> float:
         return self.value() + other
 
-    def fill(self, num_shares, end_t, end_a):
+    def fill(self, num_shares: float, end_t: datetime, end_a: float):
         """fill the order for the shares
 
         :param num_shares: number of shares
+        :type num_shares: float
         :param end_t: end time
         :type end_t: datetime
         :param end_a: end amount
+        :type end_a: float
         """
 
         self.num_shares = self.num_shares if num_shares == -1 else num_shares
@@ -59,15 +65,16 @@ class _Order:
         self.filled = True
 
     def profit_loss(self):
-        """calculates the profit
-        """
+        """calculates the profit """
         try:
-            self.profit = (self.end_amount - self.start_amount) * self.num_shares
-            return self.profit
+            profit = (self.end_amount - self.start_amount) * self.num_shares
+            self.profit = profit
+            return profit
         except TypeError:
             logging.error("End or Start amount is None")
 
     def value(self):
+        """how much the order is worth (buy or sell ammount)"""
         return self.end_amount if self.filled else self.start_amount
 
 
@@ -77,7 +84,7 @@ class Order_Info:
         self.completed_orders = []
         self.total_orders = 0
 
-    def new_order(self, num_shares, start_t, start_a):
+    def new_order(self, num_shares: float, start_t: datetime, start_a: float):
         """
         Creates new Order
         :param num_shares: number of shares
@@ -88,7 +95,7 @@ class Order_Info:
         self.open_orders.append(order)
         self.total_orders += 1
 
-    def close_order(self, num_shares, end_t, end_a):
+    def close_order(self, num_shares: float, end_t: datetime, end_a: float) -> float:
         """
         Closes order and moves order to completed list. Fills end time and end amount
         :param num_shares: number of shares to fill
@@ -127,7 +134,7 @@ class Order_Info:
         :rtype: float
         """
         return sum(
-            (closed_order.profit_loss() for closed_order in self.completed_orders)
+            closed_order.profit_loss() for closed_order in self.completed_orders
         ) - sum(open_order for open_order in self.open_orders)
 
     def to_df(self) -> pd.DataFrame:
@@ -204,19 +211,7 @@ class Strategey(ABC):
         self.current_amount += self.orders.order_worth()
         return self.current_amount
 
-    def rolling_average(self, data, time_frame):
-        """Generates simple moving average for data
-
-        :param data: data that the sma should be generated for (needs date index) 
-        :type data: DataFrame, Series 
-        :param time_frame: time frame for sma (e.g "20D") 
-        :type time_frame: str 
-        :return: sma for data for a specific time frame 
-        :rtype: Series 
-        """
-        return data.rolling(time_frame).mean()
-
-    def buy(self, date: datetime, price: float, num_shares: int = -1):
+    def buy(self, date: datetime, price: float, num_shares: float = -1):
         """Used to buy share at a certain date
 
         :param date: the day to buy the stock 
@@ -224,15 +219,16 @@ class Strategey(ABC):
         :param price: price of the stock
         :type price: float
         :param num_shares: number of shares to buy
-        :type num_shares: int
+        :type num_shares: float
+
+        if num_shares is -1 then the max amount of stocks will be bought
+
         """
 
         current_amount = self._curr_amnt()
 
         if num_shares == -1 and current_amount > 0:
             num_shares = current_amount // price
-        # else:
-        #     num_shares = 0
 
         if current_amount < price * num_shares:
             return
@@ -241,7 +237,7 @@ class Strategey(ABC):
         self.sell_orders[date] = 0
         self.orders.new_order(num_shares, start_t=date, start_a=price)
 
-    def sell(self, date: datetime, price: float, num_shares: int = -1):
+    def sell(self, date: datetime, price: float, num_shares: float = -1):
         """Used to sell share at a certain date
 
         :param date: the day to buy the stock 
@@ -249,7 +245,9 @@ class Strategey(ABC):
         :param price: price of the stock
         :type price: float
         :param num_shares: number of shares to buy
-        :type num_shares: int
+        :type num_shares: float 
+
+        if num_shares is -1 then the max amount of stocks will be sold
         """
 
         if self.active_orders > 0:
@@ -333,6 +331,7 @@ class Backtest:
         data_func: Callable = None,
         input_data: pd.DataFrame = None,
         *args,
+        **kwargs,
     ):
         """
         Creates the backtest dataframe with the initial financial data entered
@@ -342,6 +341,13 @@ class Backtest:
         :param data_func: function to get data if needed
         :param input_data: input data if needed
         :param args: args for the data func
+        :param kwargs: kwargs for the strategy 
+
+        Usage
+        -----
+        ::
+
+        Backtest(5000, "AAPL", MA_Cross_Strat, input_data=data, fast=20, lagging=100)
         """
 
         if not data_func and input_data is None:
@@ -376,46 +382,36 @@ class Backtest:
         self.initial_amount = initial_amount
         self.strat = strat
         self.ticker = ticker
+        self.kwargs = kwargs
 
     def setup_strat(self):
-        """
-        Adds strategy to backtest
-        """
-        self.strat = self.strat(self.ticker, self.data, self.initial_amount)
+        """ Adds strategy to backtest """
+        self.strat = self.strat(
+            self.ticker, self.data, self.initial_amount, **self.kwargs
+        )
 
     def _enter_positions(self):
-        """enters when to buy and sell a stack and calculates total number of stocks owned
-        """
+        """enters when to buy and sell a stack and calculates total number of stocks owned """
         self.backtest["buy"] = pd.Series(self.strat.buy_orders)
         self.backtest["sell"] = pd.Series(self.strat.sell_orders)
-        self.backtest.fillna(0, inplace=True)
+        self.backtest[["buy", "sell"]] = self.backtest[["buy", "sell"]].fillna(0)
         self.backtest["shares_owned"] = (
             self.backtest.buy - self.backtest.sell
         ).cumsum()
 
     def _net_worth(self):
-        """Calculates net worth from the strategy backtested
-        """
-        buy = self.backtest.buy
-        sell = self.backtest.sell
-        shares_owned = self.backtest.shares_owned
+        """Calculates net worth from the strategy backtested """
+        close = self.backtest.close
+        cost_adjusted_buy = (self.backtest.buy * close).cumsum()
+        cost_adjusted_sell = (self.backtest.sell * close).cumsum()
+        cost_adjusted_shares_owned = self.backtest.shares_owned * close
 
-        current_net_worth = self.initial_amount
-        real_price = self.backtest.close
-
-        net_worth = []
-        buy_cost = 0
-
-        for i in range(len(self.backtest)):
-
-            buy_cost += buy[i] * real_price[i]
-            if sell[i] != 0:
-                current_net_worth += sell[i] * real_price[i]
-            net_worth.append(
-                current_net_worth + real_price[i] * shares_owned[i] - buy_cost
-            )
-
-        self.backtest["net_worth"] = net_worth
+        self.backtest["net_worth"] = (
+            cost_adjusted_shares_owned
+            - cost_adjusted_buy
+            + cost_adjusted_sell
+            + self.initial_amount
+        )
 
     def run(self) -> pd.DataFrame:
         """Runs the backtest and fills out backtest DataFrame 
@@ -436,8 +432,54 @@ class Backtest:
             }
         )
 
-        self.backtest = pd.concat([self.backtest, market_data], axis=1).fillna(0)
+        # self.backtest = pd.concat([self.backtest, market_data], axis=1).fillna(0)
+        self.backtest = pd.concat([self.backtest, market_data], axis=1)
         return self.backtest
+
+    def optimize(
+        self,
+        opt_type: str,
+        init_state: list = [1, 1],
+        T: float = 100,
+        trials: int = 1000,
+        **kwargs,
+    ) -> list:
+        """Optimizes backtest and strategy and returns best numbers to create the most profit
+
+        :param opt_type: type of optimization (grid search or simulated annealing) 
+        :type opt_type: str
+        :param init_state: inital values for the strat, defaults to [1, 1]
+        :type init_state: list, optional
+        :param T: temperature value for simulated annealing, defaults to 100
+        :type T: float, optional
+        :param trials: iterations for simulated annealing, defaults to 1000
+        :type trials: int, optional
+        :param kwargs: the kwargs are strategy specific and is the main item that is going to be
+        optimized. ENTER KWARGS IN A RANGE FORMAT AS A LIST Example::
+
+            #[start, stop, step]
+            [0,20,2]
+
+        :return: returns a list of the best numbers and the output for those numbers.
+            For simulated annealing it will also return the history of how the algorithim
+            got to the best outcome
+        :rtype: list
+
+        Output
+        ------
+        ::
+
+            ((State), net worth)
+            ((36, 40), 1283666.5067901611)
+        if simulated annealing is uesd then there will also be a third item in the list for the
+        history
+
+        """
+
+        opt = Optimize(self.__dict__, Backtest, **kwargs)
+        if opt_type == "grid_search":
+            return opt.grid_search()
+        return opt.simulated_annealing(init_state=init_state, T=T, iterations=trials)
 
     def metrics(self, output: bool = True) -> dict:
         """prints out metrics for the backtest
@@ -514,14 +556,14 @@ class Backtest:
         risk_free_rate = Finance_Data.risk_free_rate_10y
         annual_er = (backtest.net_worth.pct_change().mean() + 1) ** 255 - 1
         sharpe = (annual_er - risk_free_rate) / (
-            backtest.net_worth.pct_change().std() * np.sqrt(252)
+            backtest.net_worth.pct_change().std() * math.sqrt(252)
         )
         stats["Sharpe Ratio"] = sharpe
 
         # ------------  Volatility -----------
         stats[
             "Volatility Annualized (% change)"
-        ] = backtest.net_worth.pct_change().std() * np.sqrt(252)
+        ] = backtest.net_worth.pct_change().std() * math.sqrt(252)
 
         # ------------  Beta -----------
 
@@ -555,7 +597,7 @@ class Backtest:
 
         # ------------  R-Squared -----------
         stats["R-Squared"] = covariance / (
-            np.sqrt(variance) * backtest.SP500.pct_change().std()
+            math.sqrt(variance) * backtest.SP500.pct_change().std()
         )
 
         if output:
@@ -573,6 +615,3 @@ class Backtest:
 
         return stats
 
-
-if __name__ == "__main__":
-    pass

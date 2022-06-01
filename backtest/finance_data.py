@@ -9,14 +9,12 @@ import yfinance as yf
 
 
 class Finance_Data:
-    # Market Data (SPY)
     market_data = yf.Ticker("SPY").history(period="MAX").Close
-    risk_free_rate_10y = yf.Ticker("^TNX").history(period="1d").Close[0] / 100
-    risk_free_rate_90d = yf.Ticker("^IRX").history(period="1d").Close[0] / 100
+    risk_free_rate_10y = yf.Ticker("^TNX").history(period="7d").Close[-1] / 100
+    risk_free_rate_90d = yf.Ticker("^IRX").history(period="7d").Close[-1] / 100
 
     def __init__(self, ticker: str = None, period: str = "MAX"):
         """setup finance data class
-
         :param ticker: ticker to get data for
         :type ticker: str
         :param period: data period, defaults to "MAX"
@@ -91,7 +89,7 @@ def load_data(path: str) -> dict:
     :return: dataframe of financial data
     :rtype: dict
     """
-    file_list = glob.glob(f"{path}/*.csv") if os.path.isdir(path) else path
+    file_list = glob.glob(f"{path}/*.csv") if os.path.isdir(path) else [path]
     return {
         Path(data).stem: pd.read_csv(data, index_col=0, parse_dates=True)
         for data in file_list

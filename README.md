@@ -53,26 +53,37 @@ pip install yfinance
 
 ## Installation:
 
-Download the `finance.py` and `strats.py` to the folder where the backtest is going to be run. Once all the dependencies are met the program can be implemented correctly[^1]
+Clone the github repo to the folder where the backtest is going to be run. Once all the dependencies are met the program can be implemented correctly. For a more consice installation download the backtest folder and then follow usage instructions[^1]
 
 [^1]: If you want to plot the data make sure to also download the `graph_colors` folder which contains the customizations for the graphs
 
 ## Usage:
 
 ```python
-from custom_strats import MA_Cross_Strat
-from finance_data import download_data, load_data
-from strats import Backtest
-
+from backtest import Backtest, download_data, load_data
+from backtest.custom_strats import MA_Cross_Strat, Ten_Percent_Strat
 # Download data for tickers
 # download_data('AAPL', 'MSFT', 'TSLA').AAPL.to_csv("./data/aapl.csv")
 
 # Load data from a directory
-data = load_data("./data")
+data = load_data("./data")["aapl"].last("10Y")
 
 # Initalize backtest and run strategy
-backtest = Backtest(5000, "AAPL", MA_Cross_Strat, input_data=data["aapl"].last("10Y"))
+backtest = Backtest(5000, "AAPL", MA_Cross_Strat, input_data=data, fast=20, lagging=100)
 output = backtest.run()
+```
+
+### Optimize Strategy
+
+```python
+backtest = Backtest(5000, "AAPL", MA_Cross_Strat, input_data=data, fast=20, lagging=100)
+
+optimal_nums, net_worth = backtest.optimize(
+    "grid_search", init_state=[1.05, 0.99], fast=[10, 42, 2], lagging=[40, 210, 10]
+)
+
+# Outputs the optimized numbers for the algorithim
+print(optimal_nums, net_worth)
 ```
 
 ### Plot Strategy against S&P500
