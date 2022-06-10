@@ -44,18 +44,22 @@ The data is then entered into pandas DataFrames and then a strategy can be made 
 - [Numpy](https://github.com/numpy/numpy)
 - [Pandas](https://github.com/pandas-dev/pandas)
 - [Yahoo Finance](https://github.com/ranaroussi/yfinance)
+- [PRAW](https://praw.readthedocs.io/en/stable/) [^1]
+
+[^1]: Not neccesary if the reddit component is not being used
 
 ```bash
 pip install numpy
 pip install pandas
 pip install yfinance
+pip install praw
 ```
 
 ## Installation:
 
-Clone the github repo to the folder where the backtest is going to be run. Once all the dependencies are met the program can be implemented correctly. For a more consice installation download the backtest folder and then follow usage instructions[^1]
+Clone the github repo to the folder where the backtest is going to be run. Once all the dependencies are met the program can be implemented correctly. For a more consice installation download the backtest folder and then follow usage instructions[^2]
 
-[^1]: If you want to plot the data make sure to also download the `graph_colors` folder which contains the customizations for the graphs
+[^2]: If you want to plot the data make sure to also download the `graph_colors` folder which contains the customizations for the graphs
 
 ## Usage:
 

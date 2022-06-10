@@ -4,3 +4,6 @@ __pycache__
 todo-notes.md
 .idea
 *.ipynb
+*.ini
+constituents.csv
+
