@@ -148,7 +148,8 @@ orders.to_df().to_csv("orders.csv")
 
 1. Add more strategies
 2. Adapt code to work with **options**
-3. Make script to analyze other sources of data to get better insight into which stocks to backtest
+3. ~Make script to analyze other sources of data to get better insight into which stocks to backtest~
 4. ~~Add more stats~~
 5. Add more items so framework is more robust
-6. **Maybe:** _Add algotrading bot to program_
+6. Rewrite **Optimize** class for more efficiency
+7. **Maybe:** _Add algotrading bot to program_
