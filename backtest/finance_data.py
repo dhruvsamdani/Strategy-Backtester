@@ -30,8 +30,8 @@ class Finance_Data:
 
         :param time_frame: time frame for percent return (needs to be a pandas time frame e.g. "10Y"), defaults to None
         :type time_frame: str, optional
-        :return: returns percent return over a time period 
-        :rtype: Series 
+        :return: returns percent return over a time period
+        :rtype: pd.Series
         """
         if time_frame:
             return (self.data.Close.last(time_frame).pct_change() + 1).cumprod()
@@ -96,14 +96,24 @@ def load_data(path: str) -> dict:
     }
 
 
-def download_data(*args, **kwargs) -> pd.DataFrame:
+def download_data(*args, period: str = "10Y", **kwargs) -> pd.DataFrame:
     """retrieves financial data from yfinance api to be downloaded
 
     *args: tickers that need data to be retrieved
+    :param period: period for the data
+    :type period: str
     **kwargs: any settings that the yfinance api needs
 
     :return: dataframe of ticker data
-    :rtype: DataFrame 
+    :rtype: DataFrame
+
+    Usage
+    ::
+
+    downdolad_data('AAPL', 'MSFT', period='max')
+
     """
     tickers = " ".join(args)
-    return yf.download(tickers, auto_adjust=True, group_by="ticker", **kwargs)
+    return yf.download(tickers, auto_adjust=True, group_by="ticker", **kwargs).last(
+        period
+    )

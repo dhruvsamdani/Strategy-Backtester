@@ -18,11 +18,11 @@ from backtest.finance_data import Finance_Data
 @total_ordering
 class _Order:
     def __init__(
-        self, num_shares: int, start_t: datetime = None, start_a: float = None
+        self, num_shares: int, start_t: datetime.datetime = None, start_a: float = None
     ):
         """order class for purchase of shares
 
-        :param num_shares: number of shares to buy 
+        :param num_shares: number of shares to buy
         :type num_shares: int
         :param start_t: start time, defaults to None
         :type start_t: datetime, optional
@@ -65,7 +65,7 @@ class _Order:
         self.filled = True
 
     def profit_loss(self):
-        """calculates the profit """
+        """calculates the profit"""
         try:
             profit = (self.end_amount - self.start_amount) * self.num_shares
             self.profit = profit
@@ -170,7 +170,7 @@ class Strategey(ABC):
         """
         Default Strategy class
 
-        :param ticker: ticker 
+        :param ticker: ticker
         :type ticker: str
         :param data: data for the strategy to find buy and sell points, defaults to None
         :type data: pd.DataFrame, optional
@@ -214,7 +214,7 @@ class Strategey(ABC):
     def buy(self, date: datetime, price: float, num_shares: float = -1):
         """Used to buy share at a certain date
 
-        :param date: the day to buy the stock 
+        :param date: the day to buy the stock
         :type date: datetime
         :param price: price of the stock
         :type price: float
@@ -240,12 +240,12 @@ class Strategey(ABC):
     def sell(self, date: datetime, price: float, num_shares: float = -1):
         """Used to sell share at a certain date
 
-        :param date: the day to buy the stock 
+        :param date: the day to buy the stock
         :type date: datetime
         :param price: price of the stock
         :type price: float
         :param num_shares: number of shares to buy
-        :type num_shares: float 
+        :type num_shares: float
 
         if num_shares is -1 then the max amount of stocks will be sold
         """
@@ -274,8 +274,8 @@ class Strategey(ABC):
     ):
         """Plots data nicely
 
-        :param data: data to be plotted 
-        :type data: DataFrame or Series with date index 
+        :param data: data to be plotted
+        :type data: DataFrame or Series with date index
         :param title: title of plot, defaults to "Stocks"
         :type title: str, optional
         :param xlabel: x-axis label, defaults to "Date"
@@ -328,9 +328,9 @@ class Backtest:
         initial_amount: int,
         ticker: str,
         strat: Type[Strategey],
+        *args,
         data_func: Callable = None,
         input_data: pd.DataFrame = None,
-        *args,
         **kwargs,
     ):
         """
@@ -341,7 +341,7 @@ class Backtest:
         :param data_func: function to get data if needed
         :param input_data: input data if needed
         :param args: args for the data func
-        :param kwargs: kwargs for the strategy 
+        :param kwargs: kwargs for the strategy
 
         Usage
         -----
@@ -385,22 +385,22 @@ class Backtest:
         self.kwargs = kwargs
 
     def setup_strat(self):
-        """ Adds strategy to backtest """
+        """Adds strategy to backtest"""
         self.strat = self.strat(
             self.ticker, self.data, self.initial_amount, **self.kwargs
         )
 
     def _enter_positions(self):
-        """enters when to buy and sell a stack and calculates total number of stocks owned """
-        self.backtest["buy"] = pd.Series(self.strat.buy_orders)
-        self.backtest["sell"] = pd.Series(self.strat.sell_orders)
+        """enters when to buy and sell a stack and calculates total number of stocks owned"""
+        self.backtest["buy"] = pd.Series(self.strat.buy_orders, dtype=np.float64)
+        self.backtest["sell"] = pd.Series(self.strat.sell_orders, dtype=np.float64)
         self.backtest[["buy", "sell"]] = self.backtest[["buy", "sell"]].fillna(0)
         self.backtest["shares_owned"] = (
             self.backtest.buy - self.backtest.sell
         ).cumsum()
 
     def _net_worth(self):
-        """Calculates net worth from the strategy backtested """
+        """Calculates net worth from the strategy backtested"""
         close = self.backtest.close
         cost_adjusted_buy = (self.backtest.buy * close).cumsum()
         cost_adjusted_sell = (self.backtest.sell * close).cumsum()
@@ -414,10 +414,10 @@ class Backtest:
         )
 
     def run(self) -> pd.DataFrame:
-        """Runs the backtest and fills out backtest DataFrame 
+        """Runs the backtest and fills out backtest DataFrame
 
-        :return: backtest data 
-        :rtype: DataFrame 
+        :return: backtest data
+        :rtype: DataFrame
         """
 
         self.setup_strat()
@@ -432,21 +432,25 @@ class Backtest:
             }
         )
 
-        # self.backtest = pd.concat([self.backtest, market_data], axis=1).fillna(0)
         self.backtest = pd.concat([self.backtest, market_data], axis=1)
         return self.backtest
 
     def optimize(
         self,
-        opt_type: str,
         init_state: list = [1, 1],
         T: float = 100,
         trials: int = 1000,
+        common_stock: bool = False,
+        opt_type: str = "grid_search",
         **kwargs,
     ) -> list:
         """Optimizes backtest and strategy and returns best numbers to create the most profit
 
-        :param opt_type: type of optimization (grid search or simulated annealing) 
+        NOTE:
+        -----
+        grid search is faster than simulated annealing with more powerful computers
+
+        :param opt_type: type of optimization (grid search or simulated annealing)
         :type opt_type: str
         :param init_state: inital values for the strat, defaults to [1, 1]
         :type init_state: list, optional
@@ -471,22 +475,20 @@ class Backtest:
 
             ((State), net worth)
             ((36, 40), 1283666.5067901611)
-        if simulated annealing is uesd then there will also be a third item in the list for the
-        history
-
         """
 
-        opt = Optimize(self.__dict__, Backtest, **kwargs)
-        if opt_type == "grid_search":
-            return opt.grid_search()
-        return opt.simulated_annealing(init_state=init_state, T=T, iterations=trials)
+        opt = Optimize(self.__dict__, Backtest, opt_type=opt_type, **kwargs)
+
+        if common_stock:
+            return opt.optimize_(init_state, T, trials), opt._find_common_stocks()
+        return opt.optimize_(init_state, T, trials)
 
     def metrics(self, output: bool = True) -> dict:
         """prints out metrics for the backtest
 
         :param output: option of whether to print out the stats, defaults to True
         :type output: bool, optional
-        :return: stats in the form of a dictionary 
+        :return: stats in the form of a dictionary
         :rtype: dict
         """
 
@@ -614,4 +616,3 @@ class Backtest:
                 print(pd.DataFrame(stats, index=["Stats"]).T)
 
         return stats
-
