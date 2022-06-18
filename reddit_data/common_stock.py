@@ -54,8 +54,8 @@ class Reddit_Stocks:
         :return: set of tickers
         :rtype: set
         """
-        if Path("tickers.csv").exists():
-            return set(pd.read_csv("./tickers.csv").symbol)
+        if Path(ROOT_PATH / "reddit_data/tickers.csv").exists():
+            return set(pd.read_csv(ROOT_PATH / "reddit_data/tickers.csv").symbol)
 
         traded = BytesIO()
         listed = BytesIO()
@@ -88,7 +88,7 @@ class Reddit_Stocks:
             & ((tickers.symbol.str.len() > 1))
         ]
         tickers = tickers[~tickers.symbol.isin(most_c[0])]
-        tickers.to_csv("tickers.csv")
+        tickers.to_csv(ROOT_PATH / "reddit_data\tickers.csv")
         return set(tickers.symbol)
 
     def _clean_text(self, text: str) -> List[str]:

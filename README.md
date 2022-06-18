@@ -1,6 +1,6 @@
-# Strategy Backtester
+# Strategy Backtest
 
-Strategy Backtester is a **python** program that backtests various strategies to make money on the stock market
+Strategy Backtest is a **python** program built with **pandas** that backtests various strategies
 
 **Example Plot**:
 ![Example Strategy Plot](./Graphs/data.png)
@@ -34,7 +34,7 @@ R-Squared                                       0.565
 
 ## How it Works:
 
-The strategey backtester works by pulling data from the yahoo finance api (unoffical) or allowing the user to supply their own data. The user can create their own strategy or use one of the provided ones. A strategy is created by making indicators that manipulate the data. For example there is a crossover strategy that compares a fast SMA (20 day) and a slow SMA (100 day).
+The strategy backtest framework works by pulling data from the yahoo finance api (unofficial) or allowing the user to supply their own data. The user can create their own strategy or use one of the provided ones. A strategy is created by making indicators that manipulate the data. For example there is a crossover strategy that compares a fast SMA (20 day) and a slow SMA (100 day).
 
 The data is then entered into pandas DataFrames and then a strategy can be made with a manipulation of the DataFrame data. After the strategy is created it the strategy can be backtested on market stock data. It can also be plotted and the orders that the strategy makes, and the strategy metrics can also be displayed.
 
@@ -46,7 +46,7 @@ The data is then entered into pandas DataFrames and then a strategy can be made 
 - [Yahoo Finance](https://github.com/ranaroussi/yfinance)
 - [PRAW](https://praw.readthedocs.io/en/stable/) [^1]
 
-[^1]: Not neccesary if the reddit component is not being used
+[^1]: Not necessary if the reddit component is not being used
 
 ```bash
 pip install numpy
@@ -57,7 +57,7 @@ pip install praw
 
 ## Installation:
 
-Clone the github repo to the folder where the backtest is going to be run. Once all the dependencies are met the program can be implemented correctly. For a more consice installation download the backtest folder and then follow usage instructions[^2]
+Clone the github repo to the folder where the backtest is going to be run. Once all the dependencies are met the program can be implemented correctly. For a quicker installation download the backtest folder and then follow usage instructions[^2]
 
 [^2]: If you want to plot the data make sure to also download the `graph_colors` folder which contains the customizations for the graphs
 
@@ -72,7 +72,7 @@ from backtest.custom_strats import MA_Cross_Strat, Ten_Percent_Strat
 # Load data from a directory
 data = load_data("./data")["aapl"].last("10Y")
 
-# Initalize backtest and run strategy
+# Initialize backtest and run strategy
 backtest = Backtest(5000, "AAPL", MA_Cross_Strat, input_data=data, fast=20, lagging=100)
 output = backtest.run()
 ```
@@ -83,10 +83,14 @@ output = backtest.run()
 backtest = Backtest(5000, "AAPL", MA_Cross_Strat, input_data=data, fast=20, lagging=100)
 
 optimal_nums, net_worth = backtest.optimize(
-    "grid_search", init_state=[1.05, 0.99], fast=[10, 42, 2], lagging=[40, 210, 10]
+    init_state=[10, 60],
+    fast=[36, 42, 2],
+    lagging=[40, 210, 10],
+    opt_type="grid_search",
+    common_stock=True,
 )
 
-# Outputs the optimized numbers for the algorithim
+# Outputs the optimized numbers for the algorithm
 print(optimal_nums, net_worth)
 ```
 
@@ -111,7 +115,7 @@ backtest.strat.plot_data(
 backtest = Backtest(...)
 
 # print output to stdout if output is marked True
-statss = backtest.metrics(output=False)
+stats = backtest.metrics(output=False)
 
 ```
 
@@ -148,8 +152,8 @@ orders.to_df().to_csv("orders.csv")
 
 1. Add more strategies
 2. Adapt code to work with **options**
-3. ~Make script to analyze other sources of data to get better insight into which stocks to backtest~
+3. ~~Make script to analyze other sources of data to get better insight into which stocks to backtest~~
 4. ~~Add more stats~~
 5. Add more items so framework is more robust
-6. Rewrite **Optimize** class for more efficiency
+6. Rewrite and improve documentation
 7. **Maybe:** _Add algotrading bot to program_

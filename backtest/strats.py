@@ -18,7 +18,7 @@ from backtest.finance_data import Finance_Data
 @total_ordering
 class _Order:
     def __init__(
-        self, num_shares: int, start_t: datetime = None, start_a: float = None
+        self, num_shares: int, start_t: datetime.datetime = None, start_a: float = None
     ):
         """order class for purchase of shares
 
@@ -432,20 +432,23 @@ class Backtest:
             }
         )
 
-        # self.backtest = pd.concat([self.backtest, market_data], axis=1).fillna(0)
         self.backtest = pd.concat([self.backtest, market_data], axis=1)
         return self.backtest
 
-    #! DOES NOT CURRENTLY RETURN FIND COMMON STOCKS
     def optimize(
         self,
-        opt_type: str,
         init_state: list = [1, 1],
         T: float = 100,
         trials: int = 1000,
+        common_stock: bool = False,
+        opt_type: str = "grid_search",
         **kwargs,
     ) -> list:
         """Optimizes backtest and strategy and returns best numbers to create the most profit
+
+        NOTE:
+        -----
+        grid search is faster than simulated annealing with more powerful computers
 
         :param opt_type: type of optimization (grid search or simulated annealing)
         :type opt_type: str
@@ -472,16 +475,13 @@ class Backtest:
 
             ((State), net worth)
             ((36, 40), 1283666.5067901611)
-        if simulated annealing is uesd then there will also be a third item in the list for the
-        history
-
         """
 
-        opt = Optimize(self.__dict__, Backtest, **kwargs)
-        if opt_type == "grid_search":
-            return opt.grid_search()
-            # OPTIONAL: opt._find_common_stocks()
-        return opt.simulated_annealing(init_state=init_state, T=T, iterations=trials)
+        opt = Optimize(self.__dict__, Backtest, opt_type=opt_type, **kwargs)
+
+        if common_stock:
+            return opt.optimize_(init_state, T, trials), opt._find_common_stocks()
+        return opt.optimize_(init_state, T, trials)
 
     def metrics(self, output: bool = True) -> dict:
         """prints out metrics for the backtest
