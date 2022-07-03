@@ -15,10 +15,6 @@ import requests
 from config import CONFIG_PATH, ROOT_PATH
 
 """
-TODO:
-    Integration with backtest
-"""
-"""
 SAMPLE CONFIG INI
 [REDDIT]
 API_KEY = <api key (app id)>

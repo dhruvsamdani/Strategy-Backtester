@@ -85,7 +85,7 @@ class Optimize:
                 args = self.sa_data
                 if self.sa_data == None:
                     raise NoOptException(
-                        "You must run a simmulated annealing opt before this one"
+                        "You must run a simulated annealing opt before this one"
                     )
             params = {
                 "ticker": stock,
@@ -139,7 +139,7 @@ class Optimize:
 
         :param init_state: initial state provided
         :type init_state: Any
-        :param T: inital temperature
+        :param T: initial temperature
         :type T: float
         :param iterations: number of iterations
         :type iterations: int
@@ -205,11 +205,11 @@ class Optimize:
 
     def _grid_search(self, **kwargs) -> Tuple[list, float]:
         """finds the optimal numbers for the backtest using a grid search (brute force).
-            The algorithm also takes advantage of multiproccesing to speed up the brute force times
+            The algorithm also takes advantage of multiprocessing to speed up the brute force times
 
         **kwargs: key word arguments for the opt function
 
-        :return: best state and ouptout (cost) of the state
+        :return: best state and output (cost) of the state
         :rtype: list[list, float]
         """
         expanded_indicator = [i._range() for i in self.indicators]

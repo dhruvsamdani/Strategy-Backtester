@@ -13,24 +13,26 @@ data.columns = data.columns.str.lower()
 backtest = Backtest(5000, "AAPL", MA_Cross_Strat, input_data=data, fast=36, lagging=40)
 
 output = backtest.run()
+backtest.metrics(output=True)
 
-opt = backtest.optimize(
-    init_state=[10, 60],
-    fast=[36, 42, 2],
-    lagging=[40, 210, 10],
-    opt_type="grid_search",
-    common_stock=True,
-)
-# Outputting optimized solution
-print(opt)
+# opt = backtest.optimize(
+#     init_state=[10, 60],
+#     fast=[36, 42, 2],
+#     lagging=[40, 210, 10],
+#     opt_type="grid_search",
+#     common_stock=False,
+# )
+
+# # Outputting optimized solution
+# print(opt)
 
 
 # # Stats
 # backtest.metrics(output=True)
 
 # # Orders
-# # orders = backtest.strat.orders
-# # orders.to_df().to_csv("orders.csv")
+orders = backtest.strat.orders
+orders.to_df().to_csv("orders.csv")
 
 # Plotting Data
 # backtest.strat.plot_data(

@@ -1,11 +1,15 @@
 import datetime
+import heapq
 import logging
 import math
 import os
+import uuid
 from abc import ABC, abstractmethod
-from collections import deque
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
 from functools import total_ordering
-from typing import Any, Callable, Type
+from numbers import Number
+from typing import Any, Callable, List, Optional, Tuple, Type
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,7 +22,12 @@ from backtest.finance_data import Finance_Data
 @total_ordering
 class _Order:
     def __init__(
-        self, num_shares: int, start_t: datetime.datetime = None, start_a: float = None
+        self,
+        num_shares: float,
+        id: uuid.UUID,
+        stop_loss: Optional[float] = None,
+        start_t: datetime.datetime = None,
+        start_a: float = None,
     ):
         """order class for purchase of shares
 
@@ -36,6 +45,8 @@ class _Order:
         self.start_time = start_t
         self.start_amount = start_a
         self.filled = False
+        self.uuid = id
+        self.stop_loss = stop_loss
 
     def __lt__(self, other: Any) -> bool:
         return False if not isinstance(other, _Order) else self.profit < other.profit
@@ -47,6 +58,13 @@ class _Order:
 
     def __radd__(self, other: Any) -> float:
         return self.value() + other
+
+    def __mul__(self, other: Any) -> float:
+        if isinstance(other, _Order):
+            return self.num_shares * other.num_shares
+        return self.num_shares * other
+
+    __rmul__ = __mul__
 
     def fill(self, num_shares: float, end_t: datetime, end_a: float):
         """fill the order for the shares
@@ -78,24 +96,88 @@ class _Order:
         return self.end_amount if self.filled else self.start_amount
 
 
-class Order_Info:
+@dataclass(order=True)
+class _Order_Packet:
+    """Dataclass for multiple orders being executed on one day"""
+
+    orders: list = field(default_factory=list[_Order])
+    sort_index: int = field(init=False)
+    num_shares: int = 0
+
+    def __mul__(self, other):
+        if isinstance(other, Number):
+            return self.num_shares * other
+        raise ArithmeticError("_Order_Packet can only be multiplied with a number")
+
+    def __add__(self, other):
+        if isinstance(other, Number):
+            return self.num_shares + other
+
+    def __sub__(self, other):
+        if isinstance(other, Number):
+            return self.num_shares - other
+
+    __rmul__ = __mul__
+    __radd__ = __add__
+    __rsub__ = __sub__
+
+    def __post_init__(self):
+        self.sort_index = self.num_shares
+
+    def append(self, item: _Order):
+        self.num_shares += item.num_shares
+        self.orders.append(item)
+
+
+class Order_Manager:
     def __init__(self):
         self.open_orders = deque()
         self.completed_orders = []
+        self.shares_owned = {}
         self.total_orders = 0
+        self.total_shares = 0
+        self.orders = defaultdict(uuid.UUID)
 
-    def new_order(self, num_shares: float, start_t: datetime, start_a: float):
+    def _replace_order(self, order: _Order, num_shares: float) -> _Order:
+        id = uuid.uuid1()
+        replace_order = _Order(
+            order.num_shares - num_shares,
+            id,
+            start_t=order.start_time,
+            start_a=order.start_amount,
+            stop_loss=order.stop_loss,
+        )
+        self.open_orders.appendleft(replace_order)
+        self.orders[id] = replace_order
+        return replace_order
+
+    def new_order(
+        self,
+        num_shares: float,
+        id: uuid.UUID,
+        start_t: datetime.datetime,
+        start_a: float,
+        stop_loss: Optional[float] = None,
+    ) -> _Order:
         """
         Creates new Order
         :param num_shares: number of shares
         :param start_t: start time
         :param start_a: start amount
         """
-        order = _Order(num_shares, start_t, start_a)
+        order = _Order(
+            num_shares, id, stop_loss=stop_loss, start_t=start_t, start_a=start_a
+        )
         self.open_orders.append(order)
         self.total_orders += 1
+        self.total_shares += num_shares
+        self.shares_owned[start_t] = self.total_shares
+        self.orders[id] = order
+        return order
 
-    def close_order(self, num_shares: float, end_t: datetime, end_a: float) -> float:
+    def close_order(
+        self, num_shares: float, end_t: datetime.datetime, end_a: float
+    ) -> Tuple[float, List[uuid.UUID]]:
         """
         Closes order and moves order to completed list. Fills end time and end amount
         :param num_shares: number of shares to fill
@@ -105,26 +187,29 @@ class Order_Info:
         :rtype: float
         """
 
+        completed = _Order_Packet()
         if num_shares == -1 and self.open_orders:
             order = self.open_orders.popleft()
             order.fill(num_shares, end_t, end_a)
             order.profit_loss()
             self.completed_orders.append(order)
-            return order.num_shares
+            self.total_shares -= order.num_shares
+            self.shares_owned[end_t] = self.total_shares
+            return order
 
         while num_shares > 0 and self.open_orders:
             order = self.open_orders.popleft()
             if num_shares < order.num_shares:
-                replace_order = _Order(
-                    order.num_shares - num_shares, order.start_time, order.start_amount
-                )
+                replace_order = self._replace_order(order, num_shares)
                 self.open_orders.appendleft(replace_order)
             order.fill(num_shares, end_t, end_a)
             order.profit_loss()
+            completed.append(order)
             self.completed_orders.append(order)
-
+            self.total_shares -= num_shares
             num_shares -= order.num_shares
-        return num_shares
+        self.shares_owned[end_t] = self.total_shares
+        return completed
 
     def order_worth(self) -> float:
         """Returns buying power from orders. Buying power will only work with a starting amount of cash.
@@ -163,7 +248,7 @@ class NoDataException(Exception):
     pass
 
 
-class Strategey(ABC):
+class Strategy(ABC):
     def __init__(
         self, ticker: str, data: pd.DataFrame = None, initial_amount: int = 100
     ):
@@ -186,13 +271,15 @@ class Strategey(ABC):
         except NameError:
             logging.error("There must be one type of (OHLCV) data for the strategy")
 
+        self._num_sell = {}
         self.indicators = []
         self.ticker = ticker.upper()
         self.buy_orders = {}
         self.sell_orders = {}
         self.active_orders = 0
-        self.orders = Order_Info()
+        self.orders = Order_Manager()
         self.current_amount = initial_amount
+        self.stop_loss = []
 
     @abstractmethod
     def setup_indicator(self):
@@ -211,7 +298,54 @@ class Strategey(ABC):
         self.current_amount += self.orders.order_worth()
         return self.current_amount
 
-    def buy(self, date: datetime, price: float, num_shares: float = -1):
+    def _exit_stop_loss(self, trading_date: pd.Timestamp) -> tuple:
+        """If there is a stop loss that needs to be executed this function will tell the user where
+
+        :param trading_date: current trading date
+        :return: None tuple or tuple of stop loss, stop loss date, and the uuid for the order
+        """
+        if (
+            not self.stop_loss
+            or self.orders.orders[self.stop_loss[0][1]].start_time > trading_date
+        ):
+            return (None,)
+
+        sl, uid = heapq.heappop(self.stop_loss)
+
+        date = self.orders.orders[uid].start_time
+
+        stop_loss_exit = self.data.close.loc[
+            (self.data.close <= sl)
+            & (self.data.index >= date)
+            & (self.data.index < trading_date)
+        ]
+
+        if stop_loss_exit.empty:
+            return (None,)
+        return stop_loss_exit.iloc[0], stop_loss_exit.index[0], uid
+
+    def _sell_functionality(
+        self, shares: float, end_time: pd.Timestamp, end_amount: float
+    ):
+        """Functionality for a sell order
+
+        :param shares: number of shares
+        :param end_time: end time of sell order
+        :param end_amount: end amount of sell order
+        """
+        closed_orders = self.orders.close_order(
+            shares, end_t=end_time, end_a=end_amount
+        )
+        self.active_orders -= closed_orders.num_shares
+        self.sell_orders[end_time] = closed_orders
+
+    def buy(
+        self,
+        date: datetime.datetime,
+        price: float,
+        num_shares: float = -1,
+        stop_loss: Optional[float] = None,
+    ):
         """Used to buy share at a certain date
 
         :param date: the day to buy the stock
@@ -223,8 +357,26 @@ class Strategey(ABC):
 
         if num_shares is -1 then the max amount of stocks will be bought
 
+        Stop Loss
+        ---------
+        stop loss must be a number not a percentage
+        Stop Loss Usage ::
+
+            # 90 percent stop loss
+            self.buy(date, price, num_shares, stop_loss=0.9 * price)
+
         """
 
+        sl = self._exit_stop_loss(date)
+        while sl[0] is not None:
+            self._sell_functionality(
+                min(self.orders.orders[sl[2]].num_shares, -1),
+                sl[1],
+                sl[0],
+            )
+            sl = self._exit_stop_loss(date)
+
+        uid = uuid.uuid1()
         current_amount = self._curr_amnt()
 
         if num_shares == -1 and current_amount > 0:
@@ -232,10 +384,16 @@ class Strategey(ABC):
 
         if current_amount < price * num_shares:
             return
+
+        order = self.orders.new_order(
+            num_shares, uid, stop_loss=stop_loss, start_t=date, start_a=price
+        )
         self.active_orders += num_shares
-        self.buy_orders[date] = num_shares
-        self.sell_orders[date] = 0
-        self.orders.new_order(num_shares, start_t=date, start_a=price)
+        self.buy_orders[date] = order
+
+        if stop_loss is not None:
+            sl = (order.stop_loss, order.uuid)
+            heapq.heappush(self.stop_loss, sl)
 
     def sell(self, date: datetime, price: float, num_shares: float = -1):
         """Used to sell share at a certain date
@@ -250,17 +408,17 @@ class Strategey(ABC):
         if num_shares is -1 then the max amount of stocks will be sold
         """
 
-        if self.active_orders > 0:
-            if num_shares == -1:
-                num_shares = self.orders.close_order(
-                    num_shares, end_t=date, end_a=price
-                )
-            else:
-                self.orders.close_order(num_shares, end_t=date, end_a=price)
+        stop_loss = self._exit_stop_loss(date)
+        while stop_loss[0] is not None:
+            self._sell_functionality(
+                min(self.orders.orders[stop_loss[2]].num_shares, -1),
+                stop_loss[1],
+                stop_loss[0],
+            )
+            stop_loss = self._exit_stop_loss(date)
 
-            self.active_orders -= num_shares
-            self.sell_orders[date] = num_shares
-            self.buy_orders[date] = 0
+        if self.active_orders > 0:
+            self._sell_functionality(num_shares, date, price)
 
     def plot_data(
         self,
@@ -327,7 +485,7 @@ class Backtest:
         self,
         initial_amount: int,
         ticker: str,
-        strat: Type[Strategey],
+        strat: Type[Strategy],
         *args,
         data_func: Callable = None,
         input_data: pd.DataFrame = None,
@@ -392,12 +550,13 @@ class Backtest:
 
     def _enter_positions(self):
         """enters when to buy and sell a stack and calculates total number of stocks owned"""
-        self.backtest["buy"] = pd.Series(self.strat.buy_orders, dtype=np.float64)
-        self.backtest["sell"] = pd.Series(self.strat.sell_orders, dtype=np.float64)
+        self.backtest["buy"] = pd.Series(self.strat.buy_orders, dtype=object)
+        self.backtest["sell"] = pd.Series(self.strat.sell_orders, dtype=object)
         self.backtest[["buy", "sell"]] = self.backtest[["buy", "sell"]].fillna(0)
-        self.backtest["shares_owned"] = (
-            self.backtest.buy - self.backtest.sell
-        ).cumsum()
+        self.backtest["shares_owned"] = pd.Series(
+            self.strat.orders.shares_owned, dtype=float
+        ).fillna(method="ffill")
+        self.backtest["shares_owned"] = self.backtest.shares_owned.ffill().fillna(0)
 
     def _net_worth(self):
         """Calculates net worth from the strategy backtested"""
