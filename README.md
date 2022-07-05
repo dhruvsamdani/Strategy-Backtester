@@ -45,21 +45,24 @@ The data is then entered into pandas DataFrames and then a strategy can be made 
 - [Pandas](https://github.com/pandas-dev/pandas)
 - [Yahoo Finance](https://github.com/ranaroussi/yfinance)
 - [PRAW](https://praw.readthedocs.io/en/stable/) [^1]
+- [Pytest](https://github.com/pytest-dev/pytest) [^2]
 
 [^1]: Not necessary if the reddit component is not being used
+[^2]: Only needed if building new features
 
 ```bash
 pip install numpy
 pip install pandas
 pip install yfinance
 pip install praw
+pip install pytest
 ```
 
 ## Installation:
 
-Clone the github repo to the folder where the backtest is going to be run. Once all the dependencies are met the program can be implemented correctly. For a quicker installation download the backtest folder and then follow usage instructions[^2]
+Clone the github repo to the folder where the backtest is going to be run. Once all the dependencies are met the program can be implemented correctly. For a quicker installation download the backtest folder and then follow usage instructions[^3]
 
-[^2]: If you want to plot the data make sure to also download the `graph_colors` folder which contains the customizations for the graphs
+[^3]: If you want to plot the data make sure to also download the `graph_colors` folder which contains the customizations for the graphs
 
 ## Usage:
 
@@ -146,6 +149,14 @@ aapl.to_csv("./data/aapl.csv")
 # Get orders (have to convert to dataframe for easy access)
 orders = backtest.strat.orders
 orders.to_df().to_csv("orders.csv")
+```
+
+### Pytest
+
+From root directory of project run
+
+```bash
+python -m pytest
 ```
 
 ## Work in Progress
