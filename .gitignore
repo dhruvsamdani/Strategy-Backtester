@@ -5,4 +5,8 @@ todo-notes.md
 .idea
 *.ipynb
 *.ini
+*.egg-info
+dist
+.pytest_cache
+test_run.py
 

@@ -1,0 +1,12 @@
+global-exclude *.ini
+global-exclude .DS_Store
+global-exclude .ipynb_checkpoints
+global-exclude __pycache__
+global-exclude todo-notes.md
+global-exclude .idea
+global-exclude *.ipynb
+include strat_backtest/data/*.csv
+include strat_backtest/graph_colors/*.mplstyle
+include strat_backtest/reddit_data/most_common.txt
+include strat_backtest/reddit_data/tickers.csv
+include strat_backtest/Graphs/data.png

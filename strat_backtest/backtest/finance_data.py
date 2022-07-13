@@ -1,4 +1,5 @@
 import glob
+from importlib import resources
 import os
 from pathlib import Path
 
@@ -46,8 +47,14 @@ class Finance_Data:
         :type color: str, optional
         """
 
-        light_style = "graph_colors/stock-light.mplstyle"
-        dark_style = "graph_colors/stock-dark.mplstyle"
+        with resources.path(
+            "strat_backtest.graph_colors", "stock-light.mplstyle"
+        ) as light:
+            light_style = light
+        with resources.path(
+            "strat_backtest.graph_colors", "stock-dark.mplstyle"
+        ) as dark:
+            dark_style = dark
         text_color = "black"
         if color == "DARK":
             plt.style.use(dark_style)

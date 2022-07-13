@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from backtest import Strategy
+from strat_backtest.backtest import Strategy
 
 
 class MA_Cross_Strat(Strategy):

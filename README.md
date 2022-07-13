@@ -3,7 +3,7 @@
 Strategy Backtest is a **python** program built with **pandas** that backtests various strategies
 
 **Example Plot**:
-![Example Strategy Plot](./Graphs/data.png)
+![Example Strategy Plot](./strat_backtest/Graphs/data.png)
 
 **Stats**
 
@@ -149,6 +149,25 @@ aapl.to_csv("./data/aapl.csv")
 # Get orders (have to convert to dataframe for easy access)
 orders = backtest.strat.orders
 orders.to_df().to_csv("orders.csv")
+```
+
+### Common Stocks via Reddit
+
+INI setup if using ini for information
+
+SAMPLE CONFIG INI
+
+```ini
+[REDDIT]
+API_KEY = <api key (app id)>
+SECRET = <secret>
+USER_AGENT = <user agent>
+```
+
+Python setup
+
+```python
+rc = common_stock.RedditConfig('APP_ID', 'SECRET', 'USER_AGENT')
 ```
 
 ### Pytest

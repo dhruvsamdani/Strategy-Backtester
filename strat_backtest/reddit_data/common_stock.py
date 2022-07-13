@@ -1,4 +1,5 @@
 import configparser
+from importlib import resources
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ import numpy as np
 import pandas as pd
 import praw
 import requests
-from config import CONFIG_PATH, ROOT_PATH
+from strat_backtest.config import CONFIG_PATH, ROOT_PATH
 
 """
 SAMPLE CONFIG INI
@@ -25,11 +26,18 @@ USER_AGENT = <user agent>
 
 @dataclass(frozen=True)
 class RedditConfig:
+
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
-    APP_ID = config["REDDIT"]["API_KEY"]
-    SECRET = config["REDDIT"]["SECRET"]
-    USER_AGENT = config["REDDIT"]["USER_AGENT"]
+
+    if config.has_section("REDDIT"):
+        APP_ID = config["REDDIT"]["API_KEY"]
+        SECRET = config["REDDIT"]["SECRET"]
+        USER_AGENT = config["REDDIT"]["USER_AGENT"]
+    else:
+        APP_ID: str = None
+        SECRET: str = None
+        USER_AGENT: str = None
 
 
 class Reddit_Stocks:
@@ -50,8 +58,10 @@ class Reddit_Stocks:
         :return: set of tickers
         :rtype: set
         """
-        if Path(ROOT_PATH / "reddit_data/tickers.csv").exists():
-            return set(pd.read_csv(ROOT_PATH / "reddit_data/tickers.csv").symbol)
+
+        with resources.path("strat_backtest.reddit_data", "tickers.csv") as tickers:
+            if Path(tickers).exists():
+                return set(pd.read_csv(tickers).symbol)
 
         traded = BytesIO()
         listed = BytesIO()
@@ -73,9 +83,8 @@ class Reddit_Stocks:
             ["symbol", "security name"]
         ]
 
-        most_c = pd.read_table(
-            str(ROOT_PATH / r"reddit_data/most_common.txt"), header=None
-        )
+        with resources.path("strat_backtest.reddit_data", "most_common.txt") as mc:
+            most_c = pd.read_table(mc, header=None)
         most_c = most_c[most_c[0].str.len() <= 4]
 
         tickers = listed.merge(traded, how="left")
@@ -84,7 +93,7 @@ class Reddit_Stocks:
             & ((tickers.symbol.str.len() > 1))
         ]
         tickers = tickers[~tickers.symbol.isin(most_c[0])]
-        tickers.to_csv(ROOT_PATH / "reddit_data\tickers.csv")
+        tickers.to_csv(ROOT_PATH / r"reddit_data\tickers.csv")
         return set(tickers.symbol)
 
     def _clean_text(self, text: str) -> List[str]:
@@ -134,7 +143,7 @@ class Reddit_Stocks:
                     (
                         [
                             self._clean_text(
-                                data["data"]["body"] if "body" in data["data"] else "",
+                                data["data"]["body"] if "body" in data["data"] else ""
                             )
                             for data in comments(submission)
                         ]

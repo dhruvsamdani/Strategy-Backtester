@@ -10,13 +10,14 @@ from dataclasses import dataclass, field
 from functools import total_ordering
 from numbers import Number
 from typing import Any, Callable, List, Optional, Tuple, Type
+from importlib import resources
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from backtest import Optimize
-from backtest.finance_data import Finance_Data
+from strat_backtest.backtest import Optimize
+from strat_backtest.backtest.finance_data import Finance_Data
 
 
 @total_ordering
@@ -370,9 +371,7 @@ class Strategy(ABC):
         sl = self._exit_stop_loss(date)
         while sl[0] is not None:
             self._sell_functionality(
-                min(self.orders.orders[sl[2]].num_shares, -1),
-                sl[1],
-                sl[0],
+                min(self.orders.orders[sl[2]].num_shares, -1), sl[1], sl[0]
             )
             sl = self._exit_stop_loss(date)
 
@@ -447,8 +446,15 @@ class Strategy(ABC):
         :param area: enables area type graph, defaults to False
         :type area: bool, optional
         """
-        light_style = "graph_colors/stock-light.mplstyle"
-        dark_style = "graph_colors/stock-dark.mplstyle"
+
+        with resources.path(
+            "strat_backtest.graph_colors", "stock-light.mplstyle"
+        ) as light:
+            light_style = light
+        with resources.path(
+            "strat_backtest.graph_colors", "stock-dark.mplstyle"
+        ) as dark:
+            dark_style = dark
         text_color = "black"
         if color == "DARK":
             plt.style.use(dark_style)

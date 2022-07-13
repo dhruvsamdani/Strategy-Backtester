@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Type
 
 import numpy as np
 from numpy.random import default_rng
-from reddit_data.common_stock import Reddit_Stocks
 
-from . import download_data
+from strat_backtest.reddit_data import Reddit_Stocks
+
+from strat_backtest.backtest.finance_data import download_data
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -217,11 +218,7 @@ class Optimize:
 
         with get_context("fork").Pool(cpu_count()) as pool:
             res = [
-                pool.apply_async(
-                    self.opt_func,
-                    (state,),
-                    kwargs,
-                ).get()
+                pool.apply_async(self.opt_func, (state,), kwargs).get()
                 for state in input_list
             ]
 
