@@ -64,7 +64,7 @@ class Optimize:
     def _setup_data(self) -> List[_Range]:
         return [_Range(self.kwargs[i]) for i in list(self.kwargs)]
 
-    def _find_common_stocks(self) -> List[Tuple]:
+    def _find_common_stocks(self, config: dict = {}) -> List[Tuple]:
         """Finds the most commonly talked about stocks and optimizes trading strategy on them
 
         :raises NoOptException: function can only be run after original optimization has been run
@@ -73,7 +73,9 @@ class Optimize:
         """
 
         c_stocks = Reddit_Stocks(
-            10, ["stocks", "wallstreetbets", "finance", "StockMarket", "investing"]
+            10,
+            ["stocks", "wallstreetbets", "finance", "StockMarket", "investing"],
+            config,
         ).most_common()
 
         most_common_stocks = []

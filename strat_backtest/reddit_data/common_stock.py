@@ -30,21 +30,28 @@ class RedditConfig:
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
 
+    """CONFIG WILL BE FAVORED OVER PARAMETERS """
+    APP_ID: str = None
+    SECRET: str = None
+    USER_AGENT: str = None
+
     if config.has_section("REDDIT"):
         APP_ID = config["REDDIT"]["API_KEY"]
         SECRET = config["REDDIT"]["SECRET"]
         USER_AGENT = config["REDDIT"]["USER_AGENT"]
-    else:
-        APP_ID: str = None
-        SECRET: str = None
-        USER_AGENT: str = None
 
 
 class Reddit_Stocks:
-    def __init__(self, number: int, subreddit: List[str]) -> None:
+    def __init__(
+        self, number: int, subreddit: List[str], config: tuple | dict = ()
+    ) -> None:
         self.n = number
         self.subreddits = subreddit
-        self.red_config = RedditConfig()
+        self.red_config = (
+            RedditConfig(**config)
+            if isinstance(config, dict)
+            else RedditConfig(*config)
+        )
         self.reddit = praw.Reddit(
             client_id=self.red_config.APP_ID,
             client_secret=self.red_config.SECRET,

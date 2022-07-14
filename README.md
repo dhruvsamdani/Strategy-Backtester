@@ -3,7 +3,7 @@
 Strategy Backtest is a **python** program built with **pandas** that backtests various strategies
 
 **Example Plot**:
-![Example Strategy Plot](./strat_backtest/Graphs/data.png)
+![](https://raw.githubusercontent.com/dhruvsamdani/strat-backtest/main/strat_backtest/Graphs/data.png "Example Graph")
 
 **Stats**
 
@@ -40,7 +40,7 @@ The data is then entered into pandas DataFrames and then a strategy can be made 
 
 ## Dependencies:
 
-- **Python 3.4+**
+- **Python 3.8+**
 - [Numpy](https://github.com/numpy/numpy)
 - [Pandas](https://github.com/pandas-dev/pandas)
 - [Yahoo Finance](https://github.com/ranaroussi/yfinance)
@@ -60,6 +60,12 @@ pip install pytest
 
 ## Installation:
 
+```bash
+pip install strat-backtest
+```
+
+### From Source
+
 Clone the github repo to the folder where the backtest is going to be run. Once all the dependencies are met the program can be implemented correctly. For a quicker installation download the backtest folder and then follow usage instructions[^3]
 
 [^3]: If you want to plot the data make sure to also download the `graph_colors` folder which contains the customizations for the graphs
@@ -67,8 +73,8 @@ Clone the github repo to the folder where the backtest is going to be run. Once 
 ## Usage:
 
 ```python
-from backtest import Backtest, download_data, load_data
-from backtest.custom_strats import MA_Cross_Strat, Ten_Percent_Strat
+from strat_backtest.backtest import Backtest, download_data, load_data
+from strat_backtest.backtest.custom_strats import MA_Cross_Strat, Ten_Percent_Strat
 # Download data for tickers
 # download_data('AAPL', 'MSFT', 'TSLA').AAPL.to_csv("./data/aapl.csv")
 

@@ -607,6 +607,7 @@ class Backtest:
         trials: int = 1000,
         common_stock: bool = False,
         opt_type: str = "grid_search",
+        config: tuple | dict = (),
         **kwargs,
     ) -> list:
         """Optimizes backtest and strategy and returns best numbers to create the most profit
@@ -623,6 +624,8 @@ class Backtest:
         :type T: float, optional
         :param trials: iterations for simulated annealing, defaults to 1000
         :type trials: int, optional
+        :param config: APP_ID, SECRET, USER_AGENT for reddit api
+        :type config: tuple or dict
         :param kwargs: the kwargs are strategy specific and is the main item that is going to be
         optimized. ENTER KWARGS IN A RANGE FORMAT AS A LIST Example::
 
@@ -645,7 +648,10 @@ class Backtest:
         opt = Optimize(self.__dict__, Backtest, opt_type=opt_type, **kwargs)
 
         if common_stock:
-            return opt.optimize_(init_state, T, trials), opt._find_common_stocks()
+            return (
+                opt.optimize_(init_state, T, trials),
+                opt._find_common_stocks(config),
+            )
         return opt.optimize_(init_state, T, trials)
 
     def metrics(self, output: bool = True) -> dict:
