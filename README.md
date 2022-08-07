@@ -32,6 +32,12 @@ Alpha                                          15.265
 R-Squared                                       0.565
 ```
 
+## Minimal Frontend
+
+[strat-backtest](https://dhruvsamdani.github.io/strat-webapp/)
+
+The frontend can only backtest the crossover strategy over a specified date for any stock. Upon first use the data loading may take some time.
+
 ## How it Works:
 
 The strategy backtest framework works by pulling data from the yahoo finance api (unofficial) or allowing the user to supply their own data. The user can create their own strategy or use one of the provided ones. A strategy is created by making indicators that manipulate the data. For example there is a crossover strategy that compares a fast SMA (20 day) and a slow SMA (100 day).
